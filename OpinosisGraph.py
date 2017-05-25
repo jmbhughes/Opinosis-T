@@ -1,12 +1,23 @@
-fromA collections import namedtuple
+from collections import namedtuple
 import networkx as nx
 
+VEN_POS_SET = set(['&', # coordinating conjunction
+                '#', # hashtag
+                '@', # mention
+                '~', # discourse marker
+                'U', # URL or email
+                'E', # emoticon
+                '$', # numeral
+                ',', # punctuation
+                'G', # abbreviation
+                ])
+
 WordUnit = namedtuple("WordUnit", ['token', 'pos'] )
-OpinosisParamters = namedtuple("OpinosisParameters", ["redundancy", "summary_size", "gap", "valid_start_node"])
+OpinosisParameters = namedtuple("OpinosisParameters", ["redundancy", "summary_size", "gap", "valid_start_node"])
 PRIEntry = namedtuple("PRIEntry", ['SID', 'PID'])
 
 class OpinosisGraph:
-    def __init__(self, sentences = [], parameters, well_formed_rules = None):
+    def __init__(self, sentences, parameters, well_formed_rules = None):
         ''' Initializes the graph utilizing the passed sentences. 
             
             Sentences should be formatted as a list of lists of tokenized terms.
@@ -15,11 +26,13 @@ class OpinosisGraph:
         self.clear()
         self.sentences = sentences
         self.parameters = parameters
-        self.build_graph(sentences)
-  
+        self.pos = dict()
+        self.build_graph()
+
         # TODO: develop protocol to import well-formed rules
 
     def clear(self):
+        ''' Deletes all contents of the graph '''
         self.graph = nx.DiGraph()
         self.pri = dict()
         self.sentences = []
@@ -32,15 +45,20 @@ class OpinosisGraph:
         '''
         # Clear out the older graph
 
-        for SID, sentence in enumerate(sentences):
+        for SID, sentence in enumerate(self.sentences):
             for PID, wordunit in enumerate(sentence):
                 assert isinstance(wordunit, WordUnit), "sentences must be a list of list of word units"
                 label = wordunit.token
+                if label in self.pos:
+                    self.pos[label].add(wordunit.pos)
+                else:
+                    self.pos[label] = set([wordunit.pos])
+                    
                 if self.graph.has_node(label):
                     self.pri[label].add(PRIEntry(SID, PID))
                 else:
                     self.graph.add_node(label)
-                    self.pri[label] = set(PRIEntry[(SID, PID)])
+                    self.pri[label] = set([PRIEntry(SID, PID)])
                 # add edge to previous node 
                 if PID != 0 and not self.graph.has_edge(sentence[PID-1].token, label):
                     self.graph.add_edge(sentence[PID-1].token, label)
@@ -52,7 +70,7 @@ class OpinosisGraph:
             position of occurrence for the node with provided label
         '''
         # TODO: space out better
-        return self.graph.has_node(label) and sum([prientry.PID for prientry in self.pri[label]]) / len(self.pri[label]) <= self.paramaters.valid_start_node
+        return self.graph.has_node(label) and sum([prientry.PID for prientry in self.pri[label]]) / len(self.pri[label]) <= self.parameters.valid_start_node
 
     def is_VEN(self, label):
         ''' Returns true if the provided label corresponds to a valid end node
@@ -61,7 +79,7 @@ class OpinosisGraph:
             coordinating conjunction
         '''
         # TODO: define naturally for tweets
-        pass
+        return len(self.pos[label].intersection(VEN_POS_SET)) > 0
 
     def is_valid_path(self, path):
         ''' Returns true if the path, a list of labels, is a valid path
@@ -79,17 +97,17 @@ class OpinosisGraph:
         if not self.is_VEN(path[-1]):
             return False # last node must be an end node
 
-        return is_well_formed(path)
+        return self.is_well_formed(path)
 
     def is_well_formed(self, path):
         ''' Returns true if the path obeys some predefined set of grammatical rules '''
         # TODO: define by importing rules and then validating for a given path
-        pass
+        return True
     
     def path_score(self, path, metric = "basic"):
         ''' Assigned score to a path '''
         # TODO: everything
-        pass 
+        return 1
 
     def is_collapsible(self, label):
         ''' Returns true if the node with that label is collapsible
@@ -106,16 +124,17 @@ class OpinosisGraph:
         ''' Builds an opinosis summary from the graph. 
             The graph must already be built 
         '''
-        summary = set()
+        summary = set([])
         node_size = len(self.graph.nodes())
         for node in self.graph.nodes():
-            if self.is_VSN(label):
+            if self.is_VSN(node):
+                print(node, "is VSN")
                 path_length = 1
                 pri_overlap = self.pri[node]
                 sentence = [node]
                 score = 0
-                self.traverse(summary, score, pri_overlap, sentence, path_length)
-                
+                self.traverse(summary, node, score, pri_overlap, sentence, path_length)
+
         # return only top entries in the summary
         final_summary = sorted(summary, key = lambda entry: -entry[1])[:self.parameters.summary_size]
         return final_summary
@@ -164,9 +183,4 @@ class OpinosisGraph:
                     pri_overlap.add(entry1)
                     pri_overlap.add(entry2)
         return pri_overlap
-
-    
-                
-    
-                
 
