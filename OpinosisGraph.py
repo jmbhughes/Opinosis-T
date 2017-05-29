@@ -1,3 +1,4 @@
+import numpy as np
 from collections import namedtuple
 import networkx as nx
 
@@ -104,10 +105,10 @@ class OpinosisGraph:
         # TODO: define by importing rules and then validating for a given path
         return True
     
-    def path_score(self, path, metric = "basic"):
+    def path_score(self, path, redundancy, metric = "basic"):
         ''' Assigned score to a path '''
         # TODO: everything
-        return 1
+        return np.log2(len(path)) * redundancy
 
     def is_collapsible(self, label):
         ''' Returns true if the node with that label is collapsible
@@ -141,6 +142,7 @@ class OpinosisGraph:
     
     def traverse(self, summary, node, score, pri_overlap, sentence, path_length):
         ''' Travel through the graph determining candidate summaries '''
+        print(len(pri_overlap))
         if len(pri_overlap) >= self.parameters.redundancy:
             # if a valid sentence has been found at it as a candidate summary
             if self.is_VEN(node) and self.is_valid_path(sentence): 
@@ -153,7 +155,7 @@ class OpinosisGraph:
                 new_sentence = sentence + [neighbor]
                 new_path_length = path_length + 1
 
-                new_score = self.path_score(new_sentence)
+                new_score = self.path_score(new_sentence, redundancy)
                 # TODO: make the new score agree with the definition in the paper shown in comment below
                 # new_score = score + self.path_score(redundancy, new_path_length)
 
